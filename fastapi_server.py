@@ -1,7 +1,9 @@
-from fastapi import FastAPI, File, UploadFile, Form, status, Header
-from fastapi.exceptions import HTTPException
-import aiofiles
+import asyncio
 import os
+
+import aiofiles
+from fastapi import FastAPI, File, UploadFile, status, Header
+from fastapi.exceptions import HTTPException
 
 app = FastAPI()
 
@@ -12,11 +14,11 @@ CHUNK_SIZE = 1024 * 1024  # adjust the chunk size as desired
 @app.post("/upload_files_by_chunks")
 async def upload(identifier: str = Header(...), file: UploadFile = File(...)):
     directory = os.path.join(os.path.abspath("media"), identifier)
-    os.makedirs(directory, exist_ok=True)
+    await asyncio.get_event_loop().run_in_executor(None, os.makedirs, directory, 0o777, True)
     filepath = os.path.join(directory, file.filename)
     try:
         async with aiofiles.open(filepath, "ab") as f:
-            async for chunk in read_in_chunks_generator(file, directory):
+            async for chunk in read_in_chunks_generator(file, filepath):
                 await f.write(chunk)
     except Exception as e:
         raise HTTPException(
@@ -26,19 +28,11 @@ async def upload(identifier: str = Header(...), file: UploadFile = File(...)):
     return {"message": f"Successfuly uploaded {file.filename}"}
 
 
-async def read_in_chunks_generator(file: UploadFile, directory: str):
-    chunks_file_path = os.path.join(directory, f"{file.filename.rsplit('.', 1)[0]}.txt")
+async def read_in_chunks_generator(file: UploadFile, full_file_path: str):
     try:
-        async with aiofiles.open(chunks_file_path) as chunks_file:
-            already_read_size = int(await chunks_file.readline())
+        already_written_size = await asyncio.get_event_loop().run_in_executor(None, os.path.getsize, full_file_path)
     except FileNotFoundError:
-        already_read_size = 0
-    await file.seek(already_read_size)
-    async with aiofiles.open(chunks_file_path, "w") as chunks_file:
-        while chunk := await file.read(CHUNK_SIZE):
-            yield chunk
-            already_read_size += CHUNK_SIZE
-            await chunks_file.seek(0)
-            await chunks_file.write(str(already_read_size))
-        await chunks_file.seek(0)
-        await chunks_file.write(str(already_read_size))
+        already_written_size = 0
+    await file.seek(already_written_size)
+    while chunk := await file.read(CHUNK_SIZE):
+        yield chunk

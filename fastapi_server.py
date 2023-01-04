@@ -1,13 +1,23 @@
 import asyncio
 import os
+from datetime import datetime
 
 import aiofiles
 from fastapi import FastAPI, File, UploadFile, status, Header
 from fastapi.exceptions import HTTPException
+from miniopy_async import Minio, credentials
 
 app = FastAPI()
 
-CHUNK_SIZE = 1024 * 1024  # adjust the chunk size as desired
+CHUNK_SIZE = 1024 * 1024 * 1024  # adjust the chunk size as desired
+
+
+@app.router.get("/")
+async def home():
+    return {
+            "greeting": "Hello, World!",
+            "current_datetime": datetime.utcnow().isoformat(),
+    }
 
 
 # ALLOWS TO CONTINUE UPLOADING A FILE EVEN WHEN THERE WAS AN ERROR BEFORE (NOT RE-UPLOADING THE FULL FILE)
@@ -36,3 +46,19 @@ async def read_in_chunks_generator(file: UploadFile, full_file_path: str):
     await file.seek(already_written_size)
     while chunk := await file.read(CHUNK_SIZE):
         yield chunk
+
+
+minio_client = Minio(
+    'minio:9000',
+    secure=False,
+    # Access and secret keys are equivalent to MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker-compose
+    access_key="MINIOUSER",
+    secret_key="MINIOPASSWORD",
+)
+
+
+@app.post("/upload_to_minio")
+async def upload_minio(identifier: str = Header(...), file: UploadFile = File(...)):
+    if not await minio_client.bucket_exists(bucket_name := f"userfiles-{identifier}"):
+        await minio_client.make_bucket(bucket_name)
+    return await minio_client.put_object(bucket_name, file.filename, file, -1, part_size=CHUNK_SIZE)

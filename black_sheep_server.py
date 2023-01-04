@@ -12,7 +12,7 @@ app = Application()
 async def home():
     return json(
         {
-            "greeting": f"Hello, World!",
+            "greeting": "Hello, World!",
             "current_datetime": datetime.utcnow().isoformat(),
         }
     )

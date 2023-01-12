@@ -1,22 +1,24 @@
 import asyncio
+import io
 import os
 from datetime import datetime
 
 import aiofiles
 from fastapi import FastAPI, File, UploadFile, status, Header
 from fastapi.exceptions import HTTPException
-from miniopy_async import Minio, credentials
+from miniopy_async import Minio
+from starlette.responses import StreamingResponse
 
 app = FastAPI()
 
-CHUNK_SIZE = 1024 * 1024 * 1024  # adjust the chunk size as desired
+CHUNK_SIZE = 10 * 1024 * 1024  # adjust the chunk size as desired
 
 
 @app.router.get("/")
 async def home():
     return {
-            "greeting": "Hello, World!",
-            "current_datetime": datetime.utcnow().isoformat(),
+        "greeting": "Hello, World!",
+        "current_datetime": datetime.utcnow().isoformat(),
     }
 
 
@@ -62,3 +64,10 @@ async def upload_minio(identifier: str = Header(...), file: UploadFile = File(..
     if not await minio_client.bucket_exists(bucket_name := f"userfiles-{identifier}"):
         await minio_client.make_bucket(bucket_name)
     return await minio_client.put_object(bucket_name, file.filename, file, -1, part_size=CHUNK_SIZE)
+
+
+@app.get("/get_from_minio")
+async def get_minio(filename: str, identifier: str = Header(...)):
+    # original url: http://minio:9000/bucket-name/filename
+    minio_response = await minio_client.get_object(f"userfiles-{identifier}", filename)
+    return StreamingResponse(io.BytesIO(await minio_response.read()))  # this may be not an optimal way to do this

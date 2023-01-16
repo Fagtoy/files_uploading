@@ -1,4 +1,21 @@
 services:
+  nginx:
+    image: nginx
+    restart: on-failure
+    ports:
+      - 80:80
+      - 81:81  # minio
+    depends_on:
+      - fastapi
+      - minio
+    links:
+      - fastapi
+      - minio
+    networks:
+      - app
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+
   fastapi:
     build:
       context: .
@@ -12,6 +29,7 @@ services:
       - minio
     networks:
       - app
+
   minio:
     image: minio/minio
     volumes:

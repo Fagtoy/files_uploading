@@ -69,5 +69,6 @@ async def upload_minio(identifier: str = Header(...), file: UploadFile = File(..
 @app.get("/get_from_minio")
 async def get_minio(filename: str, identifier: str = Header(...)):
     # original url: http://minio:9000/bucket-name/filename
+    # the following solution returns the file from FastAPI and not from Minio directly
     minio_response = await minio_client.get_object(f"userfiles-{identifier}", filename)
-    return StreamingResponse(io.BytesIO(await minio_response.read()))  # this may be not an optimal way to do this
+    return StreamingResponse(io.BytesIO(await minio_response.read()))

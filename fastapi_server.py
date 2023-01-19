@@ -1,12 +1,13 @@
 import asyncio
 import io
+import json
 import os
 from datetime import datetime
 
 import aiofiles
 from fastapi import FastAPI, File, UploadFile, status, Header
 from fastapi.exceptions import HTTPException
-from miniopy_async import Minio
+import miniopy_async
 from starlette.responses import StreamingResponse
 
 app = FastAPI()
@@ -50,7 +51,7 @@ async def read_in_chunks_generator(file: UploadFile, full_file_path: str):
         yield chunk
 
 
-minio_client = Minio(
+minio_client = miniopy_async.Minio(
     'minio:9000',
     secure=False,
     # Access and secret keys are equivalent to MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker-compose
@@ -60,15 +61,15 @@ minio_client = Minio(
 
 
 @app.post("/upload_to_minio")
-async def upload_minio(identifier: str = Header(...), file: UploadFile = File(...)):
-    if not await minio_client.bucket_exists(bucket_name := f"userfiles-{identifier}"):
-        await minio_client.make_bucket(bucket_name)
-    return await minio_client.put_object(bucket_name, file.filename, file, -1, part_size=CHUNK_SIZE)
+async def upload_minio(file: UploadFile = File(...)):
+    if not await minio_client.bucket_exists("userfiles-test-minio"):
+        await minio_client.make_bucket("userfiles-test-minio")
+    return await minio_client.put_object("userfiles-test-minio", file.filename, file, -1, part_size=CHUNK_SIZE)
 
 
 @app.get("/get_from_minio")
 async def get_minio(filename: str, identifier: str = Header(...)):
     # original url: http://minio:9000/bucket-name/filename
     # the following solution returns the file from FastAPI and not from Minio directly
-    minio_response = await minio_client.get_object(f"userfiles-{identifier}", filename)
+    minio_response = await minio_client.get_object("userfiles-test-minio", filename)
     return StreamingResponse(io.BytesIO(await minio_response.read()))
